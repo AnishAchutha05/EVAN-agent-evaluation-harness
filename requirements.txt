@@ -1,0 +1,24 @@
+# CLI and terminal
+typer
+rich
+
+# HTTP / model provider communication
+httpx
+
+# Data processing
+numpy
+pandas
+
+# Config
+pyyaml
+
+# Visualisation and statistics
+matplotlib
+scipy
+
+# Testing
+pytest
+pytest-cov
+
+# Code quality
+ruff

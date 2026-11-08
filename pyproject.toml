@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aeh"
+version = "0.1.0"
+description = "AI Safety Evaluation Harness"
+requires-python = ">=3.11"
+dependencies = ["typer", "rich", "httpx", "numpy", "pandas", "pyyaml"]
+
+[project.optional-dependencies]
+analysis = ["matplotlib", "scipy"]
+dev = ["pytest", "pytest-cov", "ruff"]
+
+[project.scripts]
+aeh = "aeh.cli.app:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+aeh = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["live: requires a running llama.cpp server"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
