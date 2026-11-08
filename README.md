@@ -1,4 +1,4 @@
-# AEH: AI Safety Evaluation Harness
+# EVAN: AI Safety Evaluation Harness
 
 **A local tool that answers one question: does the way an AI agent remembers things make it safer, more accurate, or faster?**
 
