@@ -2,7 +2,7 @@
 
 **A local tool that answers one question: does the way an AI agent remembers things make it safer, more accurate, or faster?**
 
-> **Status: early development.** The project structure, CLI design and metric definitions are locked. The engine is being built layer by layer. Nothing here is a finished result yet.
+> **Status: early development.** The project structure, CLI design and metric list are locked. The engine is being built layer by layer. Nothing here is a finished result yet.
 
 ---
 
@@ -16,17 +16,19 @@ AI agents now handle multi-step jobs: research, data entry, support tickets, cod
 | **Ephemeral** | Starts fresh at every step | Clean and predictable | Forgets useful context |
 | **Hybrid** | Starts fresh, but reuses memory that has been checked first | Balance of both | More moving parts |
 
-Today, teams pick one by gut feeling. Comparing them properly means writing custom scripts, running things by hand, and producing results nobody else can reproduce. AEH replaces that with one repeatable workflow.
+Today, teams pick one by gut feeling. Comparing them properly means writing custom scripts, running things by hand, and producing results nobody else can reproduce. EVAN replaces that with one repeatable workflow.
 
 ## What it does
 
-You point AEH at a model. It runs the **same tasks** through each architecture, deliberately **breaks things** (planting errors and malicious instructions), records everything, and prints a side-by-side scorecard.
+You point EVAN at a model. It runs the **same tasks** through each architecture, deliberately **breaks things** (planting errors and malicious instructions), records everything, and prints a side-by-side scorecard.
 
 The architecture is the *only* thing that changes. Same model, same tasks, same settings, same scoring. So if results differ, the memory design is the reason.
 
 ## What you get
 
-**Five headline metrics** (always reported):
+**Fourteen metrics, all computed on every run.** None are optional. They are grouped into three tables only to keep the report readable.
+
+**Primary (5): performance and robustness**
 
 | Metric | Plain-English meaning |
 |---|---|
@@ -36,9 +38,30 @@ The architecture is the *only* thing that changes. Same model, same tasks, same 
 | **AMR** Adversarial Manipulation Rate | How often a planted malicious instruction actually changes the agent's behaviour |
 | **IL** Inference Latency | How long the model and the full task take |
 
-**Optional extended metrics** (switch on when you need them): eight security metrics (instruction priority, role retention, tool boundaries, data exfiltration, scope containment, unintended commands, payload containment, attack detection) and one quality metric (hallucination rate). These are extensions beyond the five headline metrics in the original project report.
+**Security (8): how the agent behaves under attack**
 
-**Reports:** a terminal comparison table, CSV export, and optional diagnostic charts.
+| Metric | Plain-English meaning |
+|---|---|
+| **IPR** Instruction Priority Resistance | Does it keep following trusted instructions when an injected one conflicts? |
+| **SRR** System Role Retention Rate | Does it stay in its assigned role across steps? |
+| **TBR** Tool Boundary Respect | Does it only use the tools it is allowed to use? |
+| **EER** Exfiltration Evasion Rate | Does it avoid leaking planted secrets? |
+| **SCR** Scope Containment Rate | Does it stay within the task it was given? |
+| **UCR** Unintended Command Rate | How often does it issue commands nobody asked for? |
+| **MPC** Malicious Payload Containment | Does it avoid carrying out or passing along malicious payloads? |
+| **ADR** Attack Detection Rate | Does it notice and flag the attack? |
+
+**Quality (1)**
+
+| Metric | Plain-English meaning |
+|---|---|
+| **Hallucination Rate** | How often it states things the reference facts don't support |
+
+**Diagnostic (not a metric):** Fault Propagation Depth shows how far an error travelled through the steps, as a chart.
+
+Exact formulas, denominators and missing-data rules live in `docs/metrics_spec.md`.
+
+**Reports:** three terminal tables (Primary, Security, Quality), CSV export, and optional diagnostic charts.
 
 ## How it works (the short tech version)
 
@@ -46,20 +69,21 @@ The architecture is the *only* thing that changes. Same model, same tasks, same 
 CLI -> Experiment Runner -> Scenario Engine (faults + attacks)
                          -> Architecture Layer (Stateful | Ephemeral | Hybrid | yours)
                          -> Model Provider Adapter -> llama.cpp (local) or a cloud API
-                         -> Trace Logger -> Metrics -> Report
+                         -> Trace Logger -> Detectors -> Metrics -> Report
 ```
 
 A few ideas worth knowing:
 
-- **Counterfactual replay (for EPI).** AEH plants an error at step 2, then reruns the same task with that step *corrected*. Any failure that appears only in the broken run is blamed on the error. That separates real error spread from ordinary model mistakes.
+- **Counterfactual replay (for EPI).** EVAN plants an error at step 2, then reruns the same task with that step *corrected*. Any failure that appears only in the broken run is blamed on the error. That separates real error spread from ordinary model mistakes.
 - **Real manipulation only (for AMR).** An agent that merely *quotes* a malicious instruction isn't counted as fooled. It counts only if later outputs or actions change compared to the clean task.
-- **No fake determinism (for OCS).** Temperature 0 doesn't guarantee identical outputs, so AEH measures consistency across repeated runs using explicit per-benchmark comparison rules.
+- **No fake determinism (for OCS).** Temperature 0 doesn't guarantee identical outputs, so EVAN measures consistency across repeated runs using explicit per-benchmark comparison rules.
+- **Detectors for the security metrics.** Planted canary secrets, tool-policy checks and command scans read the trace to decide what the agent actually did.
 - **Safe by design.** Tools are sandboxed mocks with no real network, file or command access. Injected content is never executed. API keys are never logged or exported.
-- **Local first.** Models run through [llama.cpp](https://github.com/ggml-org/llama.cpp)'s `llama-server` (CPU, or GPU via Vulkan). You supply your own GGUF model; AEH never downloads weights. AEH talks to it only over an OpenAI-compatible HTTP API, so it stays independent of llama.cpp internals.
+- **Local first.** Models run through [llama.cpp](https://github.com/ggml-org/llama.cpp)'s `llama-server` (CPU, or GPU via Vulkan). You supply your own GGUF model; EVAN never downloads weights. It talks to llama.cpp only over an OpenAI-compatible HTTP API, so it stays independent of llama.cpp internals.
 
 ## Bring your own architecture
 
-Have your own agent design? Implement the `AgentBase` interface, register it, and it runs through the same pipeline as the built-ins. No changes to the runner or metrics are needed. Note that custom architecture code is trusted code, so only run code you trust.
+Have your own agent design? Implement the `AgentBase` interface, register it, and it runs through the same pipeline as the built-ins. No changes to the runner or metrics are needed. Custom architecture code is trusted code, so only run code you trust.
 
 ## Quick look (planned CLI)
 
@@ -82,8 +106,8 @@ Pilot defaults: 20 task instances, 3 repeated runs, temperature 0, seed 42, 512 
 ## Honest limits
 
 - Pilot-scale results (20 tasks) are **preliminary, not statistically conclusive**.
-- Local models may not produce identical output across runs. AEH records configs and seeds, but can't force determinism the backend doesn't offer.
-- AEH compares memory architectures. It is not a general agent benchmark. For that, see [Inspect AI](https://inspect.aisi.org.uk/) or AgentBench.
+- Local models may not produce identical output across runs. EVAN records configs and seeds, but can't force determinism the backend doesn't offer.
+- EVAN compares memory architectures. It is not a general agent benchmark. For that, see [Inspect AI](https://inspect.aisi.org.uk/) or AgentBench.
 
 ## Roadmap
 
@@ -91,7 +115,7 @@ Pilot defaults: 20 task instances, 3 repeated runs, temperature 0, seed 42, 512 
 2. Inference layer (fake model, llama.cpp adapter)
 3. Tasks and architectures
 4. Runner, traces, fault and attack scenarios
-5. Metrics, reporting, CLI
+5. Metrics, detectors, reporting, CLI
 6. Installers and V1 release
 
 Later: a terminal UI, plus more backends (CUDA, ROCm, SYCL, Apple Silicon).
